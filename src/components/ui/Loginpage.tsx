@@ -1,99 +1,49 @@
-// src/pages/LoginPage.tsx
-import React, { useState, useEffect, useRef, FormEvent } from "react";
-import { useNavigate, Link } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import toast, { Toaster } from "react-hot-toast";
 import { BrowserProvider, JsonRpcSigner } from "ethers";
 import { EgtAuthLayout } from "./EgtAuthLayout";
-// import WAValidator from "multicoin-address-validator";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
-// Types
-interface LoginFormData {
-  wallet_address: string;
+interface EthereumProvider {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  on?: (event: string, callback: (...args: unknown[]) => void) => void;
+  removeListener?: (event: string, callback: (...args: unknown[]) => void) => void;
 }
 
 declare global {
   interface Window {
-    // ethereum?: any;
+    ethereum?: EthereumProvider;
   }
 }
 
-const LoginPage: React.FC = () => {
-  const navigate = useNavigate();
-  const [walletAddress, setWalletAddress] = useState<string>("");
-  const [walletError, setWalletError] = useState<string>("");
-  const [isVerifying, setIsVerifying] = useState<boolean>(false);
-  const [isConnecting, setIsConnecting] = useState<boolean>(false);
-  const [isInitializing, setIsInitializing] = useState<boolean>(false);
+const LoginPage = () => {
+  const [walletAddress, setWalletAddress] = useState("");
+  const [walletError, setWalletError] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [hasWallet, setHasWallet] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
-  // Toast notifications
-  const showToast = (message: string, type: "success" | "error" | "info") => {
-    if (type === "success") toast.success(message);
-    else if (type === "error") toast.error(message);
-    // else toast.info(message);
-  };
+  useEffect(() => {
+    setHasWallet(!!window.ethereum);
+  }, []);
 
-  // Connect wallet function
-  const connectWallet = async (): Promise<void> => {
-    if (!window.ethereum) {
-      setWalletError("No wallet provider detected. Please install a compatible wallet.");
-      return;
-    }
-
-    setIsConnecting(true);
-    setWalletError("");
-
-    try {
-      const accounts = await window.ethereum.request({
-        method: "eth_requestAccounts",
-      });
-
-      if (accounts) {
-        // setWalletAddress(accounts[0]);
-        setWalletError("");
-        toast.success("Wallet connected successfully!");
-      } else {
-        setWalletError("No wallet address found.");
-      }
-    } catch (err: any) {
-      console.error("Wallet connection error:", err);
-      if (err.code === 4001) {
-        setWalletError("Wallet connection rejected by user.");
-      } else {
-        setWalletError("Wallet connection failed. Please try again.");
-      }
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
-  // Verify wallet signature (ethers v6)
-  const verifyWallet = async (address: string): Promise<boolean> => {
+  const verifyWallet = async (): Promise<boolean> => {
     try {
       if (!window.ethereum) {
         toast.error("No wallet provider detected.");
         return false;
       }
-
-      // Use BrowserProvider for ethers v6
-      const provider = new BrowserProvider(window.ethereum);
+      const provider = new BrowserProvider(window.ethereum as any);
       const signer: JsonRpcSigner = await provider.getSigner();
-
-      // Sign a message to verify ownership
       await signer.signMessage("Wallet verification");
-
       return true;
-    } catch (err) {
-      console.error("Verification error:", err);
-      toast.error(
-        "Watch-only wallet detected. Please use a regular wallet account."
-      );
+    } catch {
+      toast.error("Watch-only wallet detected. Please use a regular wallet account.");
       return false;
     }
   };
 
-  // Handle form submission
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (!walletAddress) {
@@ -101,114 +51,80 @@ const LoginPage: React.FC = () => {
       return;
     }
 
-    // Validate wallet address
-    // if (!WAValidator.validate(walletAddress, "ETH")) {
-    //   setWalletError("Please enter a valid Ethereum wallet address!");
-    //   return;
-    // }
-
     if (isVerifying) return;
-
     setIsVerifying(true);
     setWalletError("");
 
     try {
-      const isValidWallet = await verifyWallet(walletAddress);
-
-      if (isValidWallet) {
-        // Create hidden input for form submission
-        const form = formRef.current;
-        if (form) {
-          // Add login_submit field if not exists
-          let submitInput = form.querySelector(
-            'input[name="login_submit"]'
-          ) as HTMLInputElement;
-          if (!submitInput) {
-            submitInput = document.createElement("input");
-            submitInput.type = "hidden";
-            submitInput.name = "login_submit";
-            submitInput.value = "Login";
-            form.appendChild(submitInput);
-          }
-
-          // Submit the form
-          form.submit();
+      const isValid = await verifyWallet();
+      if (isValid && formRef.current) {
+        let submitInput = formRef.current.querySelector('input[name="login_submit"]') as HTMLInputElement | null;
+        if (!submitInput) {
+          submitInput = document.createElement("input");
+          submitInput.type = "hidden";
+          submitInput.name = "login_submit";
+          submitInput.value = "Login";
+          formRef.current.appendChild(submitInput);
         }
+        formRef.current.submit();
       } else {
         setWalletError("Wallet verification failed. Please try again.");
       }
-    } catch (error) {
-      console.error("Verification error:", error);
+    } catch {
       setWalletError("An error occurred during verification.");
     } finally {
       setIsVerifying(false);
     }
   };
 
-  // Auto-connect wallet on component mount
   useEffect(() => {
-    let mounted = true;
+    if (!window.ethereum) return;
+    let initializing = false;
 
     const autoConnect = async () => {
-      if (isInitializing) return;
-      setIsInitializing(true);
+      if (initializing) return;
+      initializing = true;
+
+      await new Promise((r) => setTimeout(r, 1000));
 
       try {
-        // Wait a bit for wallet to initialize
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        if (mounted && window.ethereum) {
-          // Check if already connected
-          try {
-            const accounts = await window.ethereum.request({
-              method: "eth_accounts",
-            });
-            // if (accounts && accounts.length > 0) {
-            //   setWalletAddress(accounts[0]);
-            // }
-          } catch (err) {
-            console.error("Auto-connect error:", err);
-          }
+        const accounts = await window.ethereum!.request({ method: "eth_requestAccounts" });
+        const accs = Array.isArray(accounts) ? accounts : [];
+        if (accs.length > 0) {
+          setWalletAddress(accs[0]);
+          setWalletError("");
+        } else {
+          setWalletError("No wallet address found.");
         }
-      } catch (error) {
-        console.error("Initialization error:", error);
+      } catch (err: any) {
+        if (err.code === 4001) {
+          setWalletError("Wallet connection rejected by user.");
+        } else {
+          setWalletError("Wallet connection failed. Please try again.");
+        }
       } finally {
-        if (mounted) {
-          setIsInitializing(false);
-        }
+        initializing = false;
       }
     };
 
     autoConnect();
 
+    const handleAccountsChanged = (...args: unknown[]) => {
+      const accounts = Array.isArray(args[0]) ? args[0] : [];
+      if (accounts.length > 0) {
+        setWalletAddress(accounts[0] as string);
+        setWalletError("");
+      } else {
+        setWalletAddress("");
+        setWalletError("No wallet address found.");
+      }
+    };
+
+    window.ethereum.on?.("accountsChanged", handleAccountsChanged);
     return () => {
-      mounted = false;
+      window.ethereum?.removeListener?.("accountsChanged", handleAccountsChanged);
     };
   }, []);
-
-  // Listen for account changes
-  useEffect(() => {
-    if (window.ethereum) {
-      const handleAccountsChanged = (accounts: string[]) => {
-        if (accounts && accounts.length > 0) {
-          setWalletAddress(accounts[0]);
-          setWalletError("");
-          console.log("Account changed to:", accounts[0]);
-        } else {
-          setWalletAddress("");
-          setWalletError("No wallet address found.");
-        }
-      };
-
-    //   window.ethereum.on("accountsChanged", handleAccountsChanged);
-
-      return () => {
-        // window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
-      };
-    }
-  }, []);
-
-  const hasWallet = typeof window !== "undefined" && window.ethereum;
 
   return (
     <>
@@ -216,24 +132,9 @@ const LoginPage: React.FC = () => {
         position="top-right"
         toastOptions={{
           duration: 5000,
-          style: {
-            background: "#363636",
-            color: "#fff",
-          },
-          success: {
-            duration: 5000,
-            style: {
-              background: "#22c55e",
-              color: "#fff",
-            },
-          },
-          error: {
-            duration: 5000,
-            style: {
-              background: "#ef4444",
-              color: "#fff",
-            },
-          },
+          style: { background: "#363636", color: "#fff" },
+          success: { duration: 5000, style: { background: "#22c55e", color: "#fff" } },
+          error: { duration: 5000, style: { background: "#ef4444", color: "#fff" } },
         }}
       />
 
@@ -264,17 +165,6 @@ const LoginPage: React.FC = () => {
 
             <div className="egt-auth-btn-row">
               <button
-                className="egt-auth-secondary"
-                type="button"
-                onClick={connectWallet}
-                disabled={isConnecting || isVerifying}
-              >
-                {isConnecting ? "Connecting..." : "Connect Wallet"}
-              </button>
-            </div>
-
-            <div className="egt-auth-btn-row">
-              <button
                 className="egt-auth-submit"
                 type="submit"
                 name="login_submit"
@@ -291,7 +181,7 @@ const LoginPage: React.FC = () => {
           </form>
         ) : (
           <div className="egt-auth-alert">
-            <span>Please install a Web3 wallet (like MetaMask) to login.</span>
+            <span>You can only log in using the DApp browser.</span>
           </div>
         )}
       </EgtAuthLayout>

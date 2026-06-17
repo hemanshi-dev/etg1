@@ -803,6 +803,23 @@
   }
 }
 
+@media (max-width: 992px) {
+  .egt-auth-hero {
+    min-height: 700px;
+    padding: 148px 0 120px;
+  }
+
+  .egt-auth-footer__main {
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    padding: 64px 0;
+  }
+
+  .egt-auth-footer__links--two {
+    column-gap: 32px;
+  }
+}
+
 @media (max-width: 760px) {
   .egt-auth-container {
     width: min(100% - 28px, 560px);
@@ -821,23 +838,41 @@
   }
 
   .egt-auth-hero {
-    min-height: 650px;
-    padding: 120px 0 110px;
+    min-height: 600px;
+    padding: 110px 0 90px;
   }
 
   .egt-auth-title {
-    margin-bottom: 42px;
-    font-size: 52px;
+    margin-bottom: 36px;
+    font-size: clamp(36px, 8vw, 52px);
+  }
+
+  .egt-auth-form-wrap {
+    width: min(520px, 100%);
+  }
+
+  .egt-auth-form {
+    gap: 14px;
   }
 
   .egt-auth-field {
-    height: 60px;
+    height: 56px;
+    padding: 0 20px;
+    font-size: 14px;
+    border-radius: 12px;
   }
 
   .egt-auth-submit,
   .egt-auth-secondary {
-    min-height: 56px;
+    min-height: 52px;
     width: 100%;
+    font-size: 16px;
+    padding: 14px 24px;
+    border-radius: 10px;
+  }
+
+  .egt-auth-account {
+    font-size: 15px;
   }
 
   .egt-auth-ring {
@@ -885,5 +920,38 @@
 
   .egt-auth-scroll span {
     font-size: 12px;
+  }
+}
+
+@media (max-width: 400px) {
+  .egt-auth-hero {
+    min-height: 540px;
+    padding: 96px 0 72px;
+  }
+
+  .egt-auth-title {
+    margin-bottom: 28px;
+    font-size: 32px;
+  }
+
+  .egt-auth-field {
+    height: 50px;
+    padding: 0 16px;
+    font-size: 13px;
+  }
+
+  .egt-auth-submit,
+  .egt-auth-secondary {
+    min-height: 48px;
+    font-size: 15px;
+    padding: 12px 18px;
+  }
+
+  .egt-auth-error {
+    font-size: 12px;
+  }
+
+  .egt-auth-account {
+    font-size: 14px;
   }
 }

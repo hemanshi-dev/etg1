@@ -1,25 +1,13 @@
 import { Link } from "@tanstack/react-router";
-import {
-  AlertCircle,
-  ArrowRight,
-  CheckCircle2,
-  Home,
-  ShieldCheck,
-  Sparkles,
-  UserRound,
-  Wallet,
-  Zap,
-} from "lucide-react";
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
-import heroGlobe from "@/assets/hero-globe.jpg";
+import { BrowserProvider, JsonRpcSigner } from "ethers";
+import toast, { Toaster } from "react-hot-toast";
 import { EgtAuthLayout } from "./EgtAuthLayout";
-
-type StatusType = "idle" | "success" | "error" | "warning";
+import { useEffect, useState, type FormEvent } from "react";
 
 interface EthereumProvider {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-  on?: (event: "accountsChanged", callback: (accounts: unknown) => void) => void;
-  removeListener?: (event: "accountsChanged", callback: (accounts: unknown) => void) => void;
+  on?: (event: string, callback: (...args: unknown[]) => void) => void;
+  removeListener?: (event: string, callback: (...args: unknown[]) => void) => void;
 }
 
 declare global {
@@ -45,42 +33,20 @@ function getInitialSponsorCode() {
 }
 
 function RegisterPage() {
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
   const [sponsorCode, setSponsorCode] = useState("");
   const [walletAddress, setWalletAddress] = useState("");
-  const [status, setStatus] = useState<{ type: StatusType; text: string }>({ type: "idle", text: "" });
-  const [isConnecting, setIsConnecting] = useState(false);
+  const [walletError, setWalletError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasWallet, setHasWallet] = useState(false);
 
   useEffect(() => {
     setSponsorCode(getInitialSponsorCode());
-  }, []);
-
-  useEffect(() => {
-    const provider = window.ethereum;
-    if (!provider?.on) return;
-
-    const handleAccountsChanged = (accountsValue: unknown) => {
-      const accounts = Array.isArray(accountsValue) ? accountsValue : [];
-      const nextAddress = typeof accounts[0] === "string" ? accounts[0] : "";
-      setWalletAddress(nextAddress);
-      setStatus(
-        nextAddress
-          ? { type: "success", text: "Wallet account updated." }
-          : { type: "warning", text: "Wallet disconnected. Please connect again." }
-      );
-    };
-
-    provider.on("accountsChanged", handleAccountsChanged);
-    return () => provider.removeListener?.("accountsChanged", handleAccountsChanged);
+    setHasWallet(!!window.ethereum);
   }, []);
 
   const ensureBscMainnet = async () => {
     const provider = window.ethereum;
-    if (!provider) {
-      throw new Error("No wallet provider detected. Please use a DApp browser or install MetaMask.");
-    }
+    if (!provider) throw new Error("No wallet provider detected.");
 
     const currentChainId = await provider.request({ method: "eth_chainId" });
     if (currentChainId === bscMainnetParams.chainId) return;
@@ -90,160 +56,176 @@ function RegisterPage() {
         method: "wallet_switchEthereumChain",
         params: [{ chainId: bscMainnetParams.chainId }],
       });
-    } catch (error) {
-      const switchError = error as { code?: number };
-      if (switchError.code !== 4902) {
+      await new Promise((r) => setTimeout(r, 1000));
+    } catch (error: any) {
+      if (error.code === 4902) {
+        await provider.request({
+          method: "wallet_addEthereumChain",
+          params: [bscMainnetParams],
+        });
+        await new Promise((r) => setTimeout(r, 1000));
+      } else {
         throw new Error("Please switch your wallet to BSC Mainnet.");
       }
-      await provider.request({
-        method: "wallet_addEthereumChain",
-        params: [bscMainnetParams],
-      });
     }
   };
 
-  const connectWallet = async () => {
-    setIsConnecting(true);
-    setStatus({ type: "idle", text: "" });
+  useEffect(() => {
+    if (!window.ethereum) return;
+    let initializing = false;
 
-    try {
-      const provider = window.ethereum;
-      if (!provider) {
-        throw new Error("No wallet provider detected. Please use a DApp browser or install MetaMask.");
+    const autoConnect = async () => {
+      if (initializing) return;
+      initializing = true;
+
+      await new Promise((r) => setTimeout(r, 1000));
+
+      try {
+        const accountsValue = await window.ethereum!.request({ method: "eth_requestAccounts" });
+        const accounts = Array.isArray(accountsValue) ? accountsValue : [];
+        if (accounts.length > 0 && typeof accounts[0] === "string") {
+          setWalletAddress(accounts[0]);
+          setWalletError("");
+          await ensureBscMainnet();
+        } else {
+          setWalletError("No wallet address found.");
+        }
+      } catch (err: any) {
+        if (err.code === 4001) {
+          setWalletError("Wallet connection rejected by user.");
+        } else {
+          setWalletError(err.message || "Wallet connection failed.");
+        }
+      } finally {
+        initializing = false;
       }
+    };
 
-      const accountsValue = await provider.request({ method: "eth_requestAccounts" });
-      const accounts = Array.isArray(accountsValue) ? accountsValue : [];
-      const nextAddress = typeof accounts[0] === "string" ? accounts[0] : "";
+    autoConnect();
 
-      if (!isEthAddress(nextAddress)) {
-        throw new Error("Wallet connection failed. Please try again.");
+    const handleAccountsChanged = (...args: unknown[]) => {
+      const accounts = Array.isArray(args[0]) ? args[0] : [];
+      if (accounts.length > 0 && typeof accounts[0] === "string") {
+        setWalletAddress(accounts[0]);
+        setWalletError("");
+      } else {
+        setWalletAddress("");
+        setWalletError("No wallet address found.");
       }
+    };
 
-      await ensureBscMainnet();
-      setWalletAddress(nextAddress);
-      setStatus({ type: "success", text: "Wallet connected on BSC Mainnet." });
-    } catch (error) {
-      setStatus({ type: "error", text: error instanceof Error ? error.message : "Wallet connection failed." });
-    } finally {
-      setIsConnecting(false);
-    }
-  };
+    window.ethereum.on?.("accountsChanged", handleAccountsChanged);
+    return () => {
+      window.ethereum?.removeListener?.("accountsChanged", handleAccountsChanged);
+    };
+  }, []);
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (!fullName.trim()) {
-      setStatus({ type: "error", text: "Please enter name." });
-      return;
-    }
-
-    if (!email.trim()) {
-      setStatus({ type: "error", text: "Please enter email." });
-      return;
-    }
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
 
     if (!sponsorCode.trim()) {
-      setStatus({ type: "error", text: "Please enter sponsor code." });
+      setWalletError("Please enter sponsor code!");
       return;
     }
 
     if (!walletAddress || !isEthAddress(walletAddress)) {
-      setStatus({ type: "error", text: "Please connect a valid wallet address." });
+      setWalletError("Please connect a valid wallet address!");
       return;
     }
 
+    if (isSubmitting) return;
     setIsSubmitting(true);
+    setWalletError("");
 
     try {
       await ensureBscMainnet();
-      await new Promise((resolve) => setTimeout(resolve, 900));
-      setStatus({
-        type: "success",
-        text: "Registration details are ready. Connect this handler to your API or smart contract submit flow.",
-      });
-      console.log("Register attempt:", { fullName, email, sponsorCode, walletAddress });
-    } catch (error) {
-      setStatus({ type: "error", text: error instanceof Error ? error.message : "Registration failed." });
+
+      const provider = new BrowserProvider(window.ethereum as any);
+      const signer: JsonRpcSigner = await provider.getSigner();
+      const userAddress = await signer.getAddress();
+
+      if (userAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+        throw new Error("Wallet address mismatch. Please reconnect.");
+      }
+
+      toast.success("Registration successful! Please login and upgrade your package.");
+      console.log("Register attempt:", { sponsorCode, walletAddress });
+    } catch (err: any) {
+      const errorMsg = err.reason || err.message || "Registration failed.";
+      if (err.code === 4001) {
+        toast.error("Transaction rejected by user.");
+      } else {
+        toast.error(errorMsg);
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <EgtAuthLayout title="Register">
-      {status.type !== "idle" && (
-        <div className={`egt-auth-status egt-auth-status--${status.type}`}>
-          <span>{status.text}</span>
-        </div>
-      )}
+    <>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 5000,
+          style: { background: "#363636", color: "#fff" },
+          success: { duration: 5000, style: { background: "#22c55e", color: "#fff" } },
+          error: { duration: 5000, style: { background: "#ef4444", color: "#fff" } },
+        }}
+      />
 
-      <form onSubmit={handleSubmit} className="egt-auth-form">
-        <input
-          id="fullName"
-          name="fullName"
-          type="text"
-          value={fullName}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setFullName(event.target.value)}
-          placeholder="Enter Name"
-          required
-          className="egt-auth-field egt-auth-field--dark"
-        />
+      <EgtAuthLayout title="Register">
+        {hasWallet ? (
+          <form id="register-form" className="egt-auth-form" onSubmit={handleSubmit}>
+            <input
+              id="sponser_id"
+              name="sponser_id"
+              type="text"
+              value={sponsorCode}
+              onChange={(e) => setSponsorCode(e.target.value)}
+              placeholder="Enter Sponsor Code"
+              required
+              className="egt-auth-field egt-auth-field--dark"
+            />
 
-        <input
-          id="email"
-          name="email"
-          type="email"
-          value={email}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setEmail(event.target.value)}
-          placeholder="Enter Email"
-          required
-          className="egt-auth-field egt-auth-field--dark"
-        />
+            <div>
+              <input
+                id="wallet_address"
+                name="wallet_address"
+                type="text"
+                value={walletAddress}
+                readOnly
+                placeholder="Connect your wallet"
+                required
+                className="egt-auth-field"
+              />
+              {walletError && <span className="egt-auth-error">{walletError}</span>}
+            </div>
 
-        <input
-          id="sponsorCode"
-          name="sponsorCode"
-          type="text"
-          value={sponsorCode}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setSponsorCode(event.target.value)}
-          placeholder="Enter Sponsor Code"
-          required
-          className="egt-auth-field egt-auth-field--dark"
-        />
+            <div className="egt-auth-btn-row">
+              <button
+                type="submit"
+                id="register_btn"
+                name="register_submit"
+                value="Register"
+                disabled={isSubmitting || !walletAddress}
+                className="egt-auth-submit"
+              >
+                {isSubmitting ? "Registering..." : "Register"}
+              </button>
+            </div>
 
-        <input
-          id="walletAddress"
-          name="walletAddress"
-          type="text"
-          value={walletAddress}
-          readOnly
-          placeholder="Connect your wallet"
-          className="egt-auth-field"
-        />
-
-        <div className="egt-auth-btn-row egt-auth-btn-row--compact">
-          <button
-            type="button"
-            onClick={connectWallet}
-            disabled={isConnecting || isSubmitting}
-            className="egt-auth-secondary"
-          >
-            {isConnecting ? "Connecting..." : walletAddress ? "Reconnect Wallet" : "Connect Wallet"}
-          </button>
-        </div>
-
-        <div className="egt-auth-btn-row egt-auth-btn-row--compact">
-          <button type="submit" disabled={isSubmitting || isConnecting} className="egt-auth-submit">
-            {isSubmitting ? "Registering..." : "Register"}
-          </button>
-        </div>
-
-        <p className="egt-auth-account">
-          Already Have an account? <Link to="/login">Login</Link>
-        </p>
-      </form>
-    </EgtAuthLayout>
+            <p className="egt-auth-account">
+              Already Have an account? <Link to="/login">Login</Link>
+            </p>
+          </form>
+        ) : (
+          <div className="egt-auth-alert">
+            <span>You can only register using the DApp browser.</span>
+          </div>
+        )}
+      </EgtAuthLayout>
+    </>
   );
 }
 
