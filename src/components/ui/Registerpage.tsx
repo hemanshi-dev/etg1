@@ -32,56 +32,59 @@ function getInitialSponsorCode() {
   return params.get("sponser_id") || params.get("sponsor_id") || params.get("sp_id") || "";
 }
 
+const ensureBscMainnet = async () => {
+  const provider = window.ethereum;
+  if (!provider) throw new Error("No wallet provider detected.");
+
+  const currentChainId = await provider.request({ method: "eth_chainId" });
+  if (currentChainId === bscMainnetParams.chainId) return;
+
+  try {
+    await provider.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: bscMainnetParams.chainId }],
+    });
+    await new Promise((r) => setTimeout(r, 1000));
+  } catch (error: unknown) {
+    const e = error as { code?: number };
+    if (e.code === 4902) {
+      await provider.request({
+        method: "wallet_addEthereumChain",
+        params: [bscMainnetParams],
+      });
+      await new Promise((r) => setTimeout(r, 1000));
+    } else {
+      throw new Error("Please switch your wallet to BSC Mainnet.");
+    }
+  }
+};
+
 function RegisterPage() {
   const [sponsorCode, setSponsorCode] = useState("");
   const [walletAddress, setWalletAddress] = useState("");
   const [walletError, setWalletError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [hasWallet, setHasWallet] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     setSponsorCode(getInitialSponsorCode());
-    setHasWallet(!!window.ethereum);
-  }, []);
 
-  const ensureBscMainnet = async () => {
-    const provider = window.ethereum;
-    if (!provider) throw new Error("No wallet provider detected.");
-
-    const currentChainId = await provider.request({ method: "eth_chainId" });
-    if (currentChainId === bscMainnetParams.chainId) return;
-
-    try {
-      await provider.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: bscMainnetParams.chainId }],
-      });
-      await new Promise((r) => setTimeout(r, 1000));
-    } catch (error: any) {
-      if (error.code === 4902) {
-        await provider.request({
-          method: "wallet_addEthereumChain",
-          params: [bscMainnetParams],
-        });
-        await new Promise((r) => setTimeout(r, 1000));
-      } else {
-        throw new Error("Please switch your wallet to BSC Mainnet.");
-      }
-    }
-  };
-
-  useEffect(() => {
     if (!window.ethereum) return;
+
     let initializing = false;
 
     const autoConnect = async () => {
       if (initializing) return;
       initializing = true;
 
-      await new Promise((r) => setTimeout(r, 1000));
+      // small delay to let wallet extension inject
+      await new Promise((r) => setTimeout(r, 800));
 
       try {
-        const accountsValue = await window.ethereum!.request({ method: "eth_requestAccounts" });
+        const accountsValue = await window.ethereum!.request({
+          method: "eth_requestAccounts",
+        });
         const accounts = Array.isArray(accountsValue) ? accountsValue : [];
         if (accounts.length > 0 && typeof accounts[0] === "string") {
           setWalletAddress(accounts[0]);
@@ -90,11 +93,12 @@ function RegisterPage() {
         } else {
           setWalletError("No wallet address found.");
         }
-      } catch (err: any) {
-        if (err.code === 4001) {
+      } catch (err: unknown) {
+        const e = err as { code?: number; message?: string };
+        if (e.code === 4001) {
           setWalletError("Wallet connection rejected by user.");
         } else {
-          setWalletError(err.message || "Wallet connection failed.");
+          setWalletError(e.message || "Wallet connection failed.");
         }
       } finally {
         initializing = false;
@@ -140,7 +144,9 @@ function RegisterPage() {
     try {
       await ensureBscMainnet();
 
-      const provider = new BrowserProvider(window.ethereum as any);
+      const provider = new BrowserProvider(
+        window.ethereum as Parameters<typeof BrowserProvider>[0],
+      );
       const signer: JsonRpcSigner = await provider.getSigner();
       const userAddress = await signer.getAddress();
 
@@ -150,17 +156,20 @@ function RegisterPage() {
 
       toast.success("Registration successful! Please login and upgrade your package.");
       console.log("Register attempt:", { sponsorCode, walletAddress });
-    } catch (err: any) {
-      const errorMsg = err.reason || err.message || "Registration failed.";
-      if (err.code === 4001) {
+    } catch (err: unknown) {
+      const e = err as { code?: number; reason?: string; message?: string };
+      if (e.code === 4001) {
         toast.error("Transaction rejected by user.");
       } else {
-        toast.error(errorMsg);
+        toast.error(e.reason || e.message || "Registration failed.");
       }
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // After mount, check if wallet is available at all
+  const noWalletDetected = mounted && !window.ethereum;
 
   return (
     <>
@@ -175,7 +184,11 @@ function RegisterPage() {
       />
 
       <EgtAuthLayout title="Register">
-        {hasWallet ? (
+        {noWalletDetected ? (
+          <div className="egt-auth-alert">
+            <span>You can only register using the DApp browser.</span>
+          </div>
+        ) : (
           <form id="register-form" className="egt-auth-form" onSubmit={handleSubmit}>
             <input
               id="sponser_id"
@@ -219,10 +232,6 @@ function RegisterPage() {
               Already Have an account? <Link to="/login">Login</Link>
             </p>
           </form>
-        ) : (
-          <div className="egt-auth-alert">
-            <span>You can only register using the DApp browser.</span>
-          </div>
         )}
       </EgtAuthLayout>
     </>

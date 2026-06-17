@@ -20,12 +20,8 @@ const LoginPage = () => {
   const [walletAddress, setWalletAddress] = useState("");
   const [walletError, setWalletError] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
-  const [hasWallet, setHasWallet] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
-
-  useEffect(() => {
-    setHasWallet(!!window.ethereum);
-  }, []);
 
   const verifyWallet = async (): Promise<boolean> => {
     try {
@@ -33,7 +29,7 @@ const LoginPage = () => {
         toast.error("No wallet provider detected.");
         return false;
       }
-      const provider = new BrowserProvider(window.ethereum as any);
+      const provider = new BrowserProvider(window.ethereum as Parameters<typeof BrowserProvider>[0]);
       const signer: JsonRpcSigner = await provider.getSigner();
       await signer.signMessage("Wallet verification");
       return true;
@@ -58,7 +54,9 @@ const LoginPage = () => {
     try {
       const isValid = await verifyWallet();
       if (isValid && formRef.current) {
-        let submitInput = formRef.current.querySelector('input[name="login_submit"]') as HTMLInputElement | null;
+        let submitInput = formRef.current.querySelector(
+          'input[name="login_submit"]',
+        ) as HTMLInputElement | null;
         if (!submitInput) {
           submitInput = document.createElement("input");
           submitInput.type = "hidden";
@@ -78,29 +76,34 @@ const LoginPage = () => {
   };
 
   useEffect(() => {
+    setMounted(true);
+
     if (!window.ethereum) return;
+
     let initializing = false;
 
     const autoConnect = async () => {
       if (initializing) return;
       initializing = true;
 
-      await new Promise((r) => setTimeout(r, 1000));
+      // small delay to let wallet extension inject
+      await new Promise((r) => setTimeout(r, 800));
 
       try {
         const accounts = await window.ethereum!.request({ method: "eth_requestAccounts" });
         const accs = Array.isArray(accounts) ? accounts : [];
-        if (accs.length > 0) {
+        if (accs.length > 0 && typeof accs[0] === "string") {
           setWalletAddress(accs[0]);
           setWalletError("");
         } else {
           setWalletError("No wallet address found.");
         }
-      } catch (err: any) {
-        if (err.code === 4001) {
+      } catch (err: unknown) {
+        const e = err as { code?: number; message?: string };
+        if (e.code === 4001) {
           setWalletError("Wallet connection rejected by user.");
         } else {
-          setWalletError("Wallet connection failed. Please try again.");
+          setWalletError(e.message || "Wallet connection failed. Please try again.");
         }
       } finally {
         initializing = false;
@@ -111,8 +114,8 @@ const LoginPage = () => {
 
     const handleAccountsChanged = (...args: unknown[]) => {
       const accounts = Array.isArray(args[0]) ? args[0] : [];
-      if (accounts.length > 0) {
-        setWalletAddress(accounts[0] as string);
+      if (accounts.length > 0 && typeof accounts[0] === "string") {
+        setWalletAddress(accounts[0]);
         setWalletError("");
       } else {
         setWalletAddress("");
@@ -125,6 +128,9 @@ const LoginPage = () => {
       window.ethereum?.removeListener?.("accountsChanged", handleAccountsChanged);
     };
   }, []);
+
+  // After mount, check if wallet is available at all
+  const noWalletDetected = mounted && !window.ethereum;
 
   return (
     <>
@@ -139,7 +145,11 @@ const LoginPage = () => {
       />
 
       <EgtAuthLayout title="Login">
-        {hasWallet ? (
+        {noWalletDetected ? (
+          <div className="egt-auth-alert">
+            <span>You can only log in using the DApp browser.</span>
+          </div>
+        ) : (
           <form
             ref={formRef}
             id="login-form"
@@ -176,13 +186,9 @@ const LoginPage = () => {
             </div>
 
             <p className="egt-auth-account">
-              Don't have an account? <Link to="/register">Register</Link>
+              Don&apos;t have an account? <Link to="/register">Register</Link>
             </p>
           </form>
-        ) : (
-          <div className="egt-auth-alert">
-            <span>You can only log in using the DApp browser.</span>
-          </div>
         )}
       </EgtAuthLayout>
     </>
