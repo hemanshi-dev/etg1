@@ -758,38 +758,177 @@
   color: #e85b50;
 }
 
-.egt-auth-scroll {
+/* ─── Preloader ─── */
+.egt-preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: #050303;
+  transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+
+.egt-preloader--done {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.egt-preloader__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+
+.egt-preloader__logo {
+  animation: egt-preloader-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes egt-preloader-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.96); }
+}
+
+.egt-preloader__spinner {
+  display: block;
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(212, 72, 60, 0.2);
+  border-top-color: #d4483c;
+  border-radius: 50%;
+  animation: egt-spin 0.8s linear infinite;
+}
+
+@keyframes egt-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Auth page entrance animations ─── */
+@keyframes egt-fadeUp {
+  from { opacity: 0; transform: translateY(50px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes egt-fadeDown {
+  from { opacity: 0; transform: translateY(-30px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes egt-zoomInLeft {
+  from { opacity: 0; transform: translateX(80px) scale(0.65) rotate(8deg); }
+  to   { opacity: 0.96; transform: translateX(0) scale(1) rotate(0deg); }
+}
+
+@keyframes egt-fadeInStar {
+  from { opacity: 0; transform: translateY(24px) scale(0.7); }
+  to   { opacity: 0.95; transform: translateY(0) scale(1); }
+}
+
+/* Header slides down */
+.egt-anim-header {
+  animation: egt-fadeDown 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Title: fade-up, delay 0.4s — matches data-aos-delay="400" */
+.egt-anim-title {
+  opacity: 0;
+  animation: egt-fadeUp 1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.4s forwards;
+}
+
+/* Form wrap: fade-up, delay 0.7s — matches data-aos-delay="700" */
+.egt-anim-form {
+  opacity: 0;
+  animation: egt-fadeUp 1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.7s forwards;
+}
+
+/* Ring shape: zoom-in-left, delay 0.5s — matches data-aos-delay="500", duration 2000ms */
+.egt-anim-ring {
+  opacity: 0;
+  animation: egt-zoomInLeft 2s cubic-bezier(0.2, 0.8, 0.2, 1) 0.5s forwards;
+}
+
+/* Star shape: fade-up, delay 0.1s — matches data-aos-delay="100" */
+.egt-anim-star {
+  opacity: 0;
+  /* enters first, then the existing pulse takes over */
+  animation:
+    egt-fadeInStar 1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.1s forwards,
+    auth-star-pulse 3.2s ease-in-out 1.1s infinite;
+}
+
+/* Staggered form fields — each child fades up with increasing delay */
+.egt-auth-form > * {
+  opacity: 0;
+  animation: egt-fadeUp 0.75s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.egt-auth-form > *:nth-child(1) { animation-delay: 0.85s; }
+.egt-auth-form > *:nth-child(2) { animation-delay: 1.00s; }
+.egt-auth-form > *:nth-child(3) { animation-delay: 1.15s; }
+.egt-auth-form > *:nth-child(4) { animation-delay: 1.30s; }
+.egt-auth-form > *:nth-child(5) { animation-delay: 1.45s; }
+.egt-auth-form > *:nth-child(6) { animation-delay: 1.60s; }
+
+/* ─── Back-to-top button (SVG circle progress) ─── */
+.egt-back-to-top {
   position: fixed;
   right: 24px;
   bottom: 24px;
   z-index: 50;
-  width: 72px;
-  height: 72px;
+  width: 64px;
+  height: 64px;
   border: 0;
-  border-radius: 999px;
-  padding: 5px;
-  box-shadow: 0 16px 36px rgba(110, 109, 109, 0.36);
-  transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s ease;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.egt-auth-scroll:hover {
-  transform: translateY(-3px) scale(1.02) !important;
+.egt-back-to-top:hover {
+  transform: translateY(-4px) scale(1.06) !important;
 }
 
-.egt-auth-scroll:active {
-  transform: scale(0.96) !important;
+.egt-back-to-top:active {
+  transform: scale(0.94) !important;
 }
 
-.egt-auth-scroll span {
+.egt-back-to-top__circle {
+  position: relative;
+  display: block;
   width: 100%;
   height: 100%;
+}
+
+.egt-back-to-top__svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.egt-back-to-top__bg {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 6;
+}
+
+.egt-back-to-top__progress {
+  fill: none;
+  stroke: #d4483c;
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.2s ease;
+}
+
+.egt-back-to-top__pct {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
-  border-radius: inherit;
-  background: #d4483c;
   color: #fff;
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 800;
+  letter-spacing: 0.02em;
 }
 
 @media (max-width: 1180px) {
@@ -911,15 +1050,15 @@
     min-width: 0;
   }
 
-  .egt-auth-scroll {
-    width: 58px;
-    height: 58px;
-    right: 16px;
-    bottom: 16px;
+  .egt-back-to-top {
+    width: 52px;
+    height: 52px;
+    right: 14px;
+    bottom: 14px;
   }
 
-  .egt-auth-scroll span {
-    font-size: 12px;
+  .egt-back-to-top__pct {
+    font-size: 9px;
   }
 }
 
